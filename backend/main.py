@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from twilio.base.exceptions import TwilioRestException
 
 from auth import verify_jwt_token
 from twilio_service import send_dispatch_sms
@@ -9,12 +8,20 @@ from twilio_service import send_dispatch_sms
 app = FastAPI(title="Project INDRA API")
 
 
+# ==============================
+# Request Model
+# ==============================
+
 class DispatchRequest(BaseModel):
     target_atm_id: str = Field(
         min_length=1,
         max_length=50
     )
 
+
+# ==============================
+# Health Check
+# ==============================
 
 @app.get("/health")
 def health_check():
@@ -24,13 +31,23 @@ def health_check():
     }
 
 
+# ==============================
+# JWT Protected Test
+# ==============================
+
 @app.get("/protected-test")
-def protected_test(user=Depends(verify_jwt_token)):
+def protected_test(
+    user=Depends(verify_jwt_token)
+):
     return {
         "message": "JWT authentication successful",
         "user": user
     }
 
+
+# ==============================
+# Secure Dispatch API
+# ==============================
 
 @app.post("/api/dispatch")
 def dispatch_alert(
@@ -39,26 +56,22 @@ def dispatch_alert(
 ):
 
     try:
-        message_sid = send_dispatch_sms(
+        # Send SMS / Demo Alert
+        sms_result = send_dispatch_sms(
             request.target_atm_id
         )
 
-    except RuntimeError:
+    except RuntimeError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="SMS service is not configured"
+            detail=str(e)
         )
 
-    except TwilioRestException:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="SMS dispatch failed"
-        )
-
+    # Successful response
     return {
         "status": "success",
         "message": "Dispatch alert sent",
         "target_atm_id": request.target_atm_id,
         "requested_by": user["user_id"],
-        "twilio_message_sid": message_sid
+        "dispatch": sms_result
     }
